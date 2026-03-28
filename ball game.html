@@ -99,7 +99,7 @@ ballImg.src = 'bola amarela.webp';
 const gunImg = new Image(); 
 gunImg.src = 'arma-de-gelo.webp'; 
 
-// Sprites do Assas (usados apenas nas fases 51-70)
+// Sprites do Assas
 const assasSprites = [];
 const assasSpriteData = [];
 let assasLoadedCount = 0;
@@ -126,7 +126,6 @@ let currentLevel = 1, deaths = 0, startTime, gameRunning = false;
 let keys = {}, mouse = { x: 0, y: 0 }, platforms = [], bullets = [], lasers = [], movingPlatforms = [];
 let player = { x: 60, y: 300, r: 18, vx: 0, vy: 0, angle: 0, grounded: false, canDoubleJump: true };
 let spriteFrame = 0, spriteTimer = 0;
-let cameraX = 0;
 let playerName = "";
 
 function startGame() {
@@ -185,8 +184,7 @@ function getBiome(n) {
     if (n <= 10) return { bg: "#87ceeb", g: "#5d4037", t: "#2ecc71", grav: 0.8 };
     if (n <= 20) return { bg: "#f0f8ff", g: "#b0c4de", t: "#ffffff", grav: 0.8 };
     if (n <= 32) return { bg: "#2a0000", g: "#440000", t: "#ff4500", lava: true, hasGun: true, grav: 0.8 };
-    // NOVAS FASES 33-40: Caos Móvel (plataformas que se movem, espinhos sincronizados)
-    if (n >= 33 && n <= 40) return { bg: "#2a1a2a", g: "#4a2a3a", t: "#ff66cc", grav: 0.8, isDynamic: true, levelType: "dynamic" };
+    if (n >= 33 && n <= 40) return { bg: "#2a1a2a", g: "#4a2a3a", t: "#ff66cc", grav: 0.8, isDynamic: true };
     if (n <= 50) return { bg: "#001a33", g: "#003366", t: "#00d4ff", water: true, grav: 0.2 }; 
     if (n <= 70) return { bg: "#050505", g: "#111", t: "#f00", laser: true, grav: 0.8, isAssas: true, flappy: true, hasGun: true }; 
     if (n <= 90) return { bg: "#4a1a2a", g: "#2a0a1a", t: "#ff66cc", grav: 0.85 }; 
@@ -220,12 +218,10 @@ function generateLevel(n) {
         }
     }
 
-    // NOVAS FASES DINÂMICAS (plataformas móveis e espinhos)
     if (b.isDynamic) {
         // Plataforma inicial fixa
         lv.push({x: 0, y: 450, w: 80, h: 20, c: "#888", t: "#aaa", type: 'normal'});
         
-        // Gera várias plataformas móveis mais lentas e com movimento suave
         let numPlatforms = 6 + Math.floor(random() * 4);
         let startX = 120;
         for (let i = 0; i < numPlatforms; i++) {
@@ -233,8 +229,8 @@ function generateLevel(n) {
             if (x > 900) break;
             let y = 200 + random() * 250;
             let w = 60 + random() * 40;
-            let moveRange = 30 + random() * 40; // movimento mais curto
-            let speed = 0.008 + random() * 0.012; // mais lento
+            let moveRange = 30 + random() * 40;
+            let speed = 0.008 + random() * 0.012;
             let phase = random() * Math.PI * 2;
             let type = random() > 0.7 ? 'spike' : 'moving';
             movingPlatforms.push({
@@ -248,17 +244,15 @@ function generateLevel(n) {
             });
         }
         
-        // Adiciona algumas plataformas fixas perigosas (espinhos)
         for (let i = 0; i < 4; i++) {
             lv.push({x: 150 + random() * 700, y: 400 + random() * 50, w: 50, h: 15, c: "#f00", t: "#f88", type: 'spike'});
         }
         
-        // Goal no final
         lv.push({x: 920, y: 380, type: 'goal'});
         return lv;
     }
 
-    // Geração normal para outras fases
+    // Geração normal
     lv.push({x: 0, y: 400, w: 120, h: 500, c: b.g, t: b.t, type: 'normal'});
     let lx = 120, ly = 400;
     while (lx < 850) {
@@ -281,7 +275,6 @@ function loadLevel(n) {
     currentLevel = n; 
     bullets = []; 
     platforms = generateLevel(n); 
-    cameraX = 0;
     
     let b = getBiome(n);
     if (b.laser) {
@@ -289,7 +282,7 @@ function loadLevel(n) {
         player.y = 250;
     } else if (b.isDynamic) {
         player.x = 60;
-        player.y = 430; // começa em cima da plataforma inicial
+        player.y = 430;
     } else if (n === 100) {
         player.x = 100;
         player.y = 250;
@@ -337,11 +330,23 @@ function update() {
     
     if(b.isAssas) { spriteTimer++; if(spriteTimer % 5 === 0) spriteFrame = (spriteFrame + 1) % 8; }
 
-    // Controles - MAIS SUAVES E LENTOS
-    if (keys[39]) player.vx += 0.45;   // aceleração reduzida
-    if (keys[37]) player.vx -= 0.45;
+    // ========== CONTROLE SEM ACELERAÇÃO (RESPOSTA IMEDIATA) ==========
+    const MOVE_SPEED = 4.8;  // velocidade constante enquanto segura a tecla
     
-    // Rotação
+    if (keys[39]) {
+        player.vx = MOVE_SPEED;
+    } else if (keys[37]) {
+        player.vx = -MOVE_SPEED;
+    } else {
+        // Quando nenhuma tecla é pressionada, aplica atrito para parar
+        player.vx *= 0.92;
+    }
+    
+    // Limita a velocidade ao valor máximo (evita extrapolar)
+    player.vx = Math.min(Math.max(player.vx, -MOVE_SPEED), MOVE_SPEED);
+    // ================================================================
+    
+    // Rotação (baseada na velocidade)
     player.angle += player.vx * 0.1;
     if (!player.grounded && Math.abs(player.vy) > 3) {
         player.angle += (player.vy > 0 ? 0.06 : -0.06);
@@ -354,23 +359,15 @@ function update() {
     player.x += player.vx;
     player.y += player.vy;
     
-    // Atrito no ar e no chão (maior atrito para controle)
-    if (!player.grounded) player.vx *= 0.99;
-    else player.vx *= 0.97;   // atrito maior no chão
-    
-    // Limite de velocidade máxima (mais baixo)
-    let maxSpeed = 9;
-    player.vx = Math.min(Math.max(player.vx, -maxSpeed), maxSpeed);
-    
     // Limites laterais
     if (player.x < player.r) player.x = player.r;
     if (player.x > 1000 - player.r) player.x = 1000 - player.r;
     
-    // Colisão com plataformas (incluindo as móveis)
+    // Colisões
     player.grounded = false;
     let collisionOccurred = false;
     
-    // Primeiro, plataformas fixas (do array platforms)
+    // Plataformas fixas
     platforms.forEach(p => {
         if (p.type === 'goal' && Math.hypot(player.x - p.x, player.y - (p.y - 20)) < 45) {
             loadLevel(currentLevel + 1);
@@ -388,14 +385,12 @@ function update() {
         }
     });
     
-    // Depois, plataformas móveis (se existirem)
+    // Plataformas móveis
     if (b.isDynamic) {
         movingPlatforms.forEach(mp => {
-            // Atualiza posição Y da plataforma móvel (movimento suave)
             let newY = mp.originalY + Math.sin(Date.now() * mp.speed + mp.phase) * mp.moveRange;
             mp.y = newY;
             
-            // Colisão com a plataforma móvel
             if (player.x + player.r > mp.x && player.x - player.r < mp.x + mp.w && 
                 player.y + player.r > mp.y && player.y - player.r < mp.y + mp.h) {
                 if (mp.type === 'spike') { deaths++; loadLevel(currentLevel); return; }
@@ -410,14 +405,13 @@ function update() {
         });
     }
     
-    // Se não colidiu com nada, está no ar
     if (!collisionOccurred) player.grounded = false;
     
-    // Limite inferior (morte)
+    // Morte por queda
     if (player.y > 550) { deaths++; loadLevel(currentLevel); }
     if (player.y < -150) { deaths++; loadLevel(currentLevel); }
     
-    // Lava (se houver)
+    // Lava
     if (b.lava && player.y + player.r > 480) { deaths++; loadLevel(currentLevel); }
     
     // Lasers
@@ -483,7 +477,6 @@ function draw() {
         ctx.shadowBlur = 0;
     }
     
-    // Desenho de fundo e plataformas
     ctx.fillStyle = b.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -540,7 +533,6 @@ function draw() {
     
     bullets.forEach(bu => { ctx.fillStyle = "cyan"; ctx.beginPath(); ctx.arc(bu.x, bu.y, 6, 0, Math.PI*2); ctx.fill(); });
     
-    // Jogador
     ctx.save();
     ctx.translate(player.x, player.y);
     if(b.isAssas) {
@@ -567,7 +559,6 @@ function draw() {
         ctx.restore();
     }
     
-    // Texto informativo para fases dinâmicas
     if (b.isDynamic) {
         ctx.font = "bold 20px monospace";
         ctx.fillStyle = "#ffcc66";
@@ -593,12 +584,12 @@ window.addEventListener("keydown", e => {
         if (b.flappy) { player.vy = -7; } 
         else {
             if (player.grounded) { 
-                player.vy = -11;   // pulo um pouco mais suave
+                player.vy = -11;
                 player.grounded = false;
                 player.angle += 0.2;
             }
             else if (player.canDoubleJump) { 
-                player.vy = -9; 
+                player.vy = -9;
                 player.canDoubleJump = false;
                 player.angle += 0.4;
             }
