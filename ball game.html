@@ -330,16 +330,16 @@ function update() {
     
     if(b.isAssas) { spriteTimer++; if(spriteTimer % 5 === 0) spriteFrame = (spriteFrame + 1) % 8; }
 
-    // ========== CONTROLE SEM ACELERAÇÃO (RESPOSTA IMEDIATA) ==========
-    const MOVE_SPEED = 4.8;  // velocidade constante enquanto segura a tecla
+    // ========== CONTROLE SEM ACELERAÇÃO (RESPOSTA IMEDIATA) - VELOCIDADE MAIS LENTA ==========
+    const MOVE_SPEED = 3.0;  // Velocidade constante enquanto segura a tecla
     
     if (keys[39]) {
         player.vx = MOVE_SPEED;
     } else if (keys[37]) {
         player.vx = -MOVE_SPEED;
     } else {
-        // Quando nenhuma tecla é pressionada, aplica atrito para parar
-        player.vx *= 0.92;
+        // Quando nenhuma tecla é pressionada, aplica atrito para parar rapidamente
+        player.vx *= 0.94;
     }
     
     // Limita a velocidade ao valor máximo (evita extrapolar)
