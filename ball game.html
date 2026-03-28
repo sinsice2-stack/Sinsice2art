@@ -2,205 +2,620 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Super Ball - Sinsice Edition</title>
+    <title>Super Ball - Sinsice Definitive Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; }
-        canvas { border: 2px solid #555; box-shadow: 0 0 60px rgba(0,0,0,0.9); cursor: crosshair; display: none; }
+        canvas { border: 2px solid #555; box-shadow: 0 0 60px rgba(0,0,0,0.9); cursor: crosshair; }
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: white; z-index: 100; }
         .menu-btn { padding: 15px 40px; margin: 10px; font-size: 20px; cursor: pointer; background: #00d4ff; border: none; border-radius: 5px; font-weight: bold; transition: 0.3s; }
         .menu-btn:hover { background: #fff; transform: scale(1.1); color: #000; }
         input { padding: 12px; font-size: 18px; border-radius: 5px; border: none; margin-bottom: 20px; text-align: center; width: 250px; }
-        .hud { color: white; position: absolute; top: 20px; font-size: 18px; width: 100%; pointer-events: none; display: flex; justify-content: space-around; z-index: 10; font-weight: bold; text-shadow: 2px 2px 4px #000; display: none; }
+        .hud { color: white; position: absolute; top: 20px; font-size: 18px; width: 100%; pointer-events: none; display: flex; justify-content: space-around; z-index: 10; font-weight: bold; text-shadow: 2px 2px 4px #000; }
         b { color: #00fbff; font-size: 24px; }
-        #welcomeMsg { color: #ffea00; margin-bottom: 10px; font-weight: bold; height: 30px; font-size: 22px; }
+        .victory-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a0033, #000000);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            animation: fadeIn 1s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes glow {
+            0% { text-shadow: 0 0 10px gold; }
+            100% { text-shadow: 0 0 30px orange; }
+        }
+        .victory-title {
+            font-size: 72px;
+            font-weight: bold;
+            color: gold;
+            animation: glow 0.5s infinite alternate;
+            margin-bottom: 20px;
+        }
+        .victory-stats {
+            font-size: 24px;
+            margin: 20px;
+            text-align: center;
+            line-height: 2;
+        }
+        .victory-stats span {
+            color: #00fbff;
+            font-weight: bold;
+            font-size: 32px;
+        }
+        .restart-btn {
+            padding: 15px 40px;
+            margin-top: 30px;
+            font-size: 20px;
+            cursor: pointer;
+            background: gold;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .restart-btn:hover {
+            transform: scale(1.1);
+            background: orange;
+            box-shadow: 0 0 30px gold;
+        }
     </style>
 </head>
 <body>
 
-    <div class="hud" id="gameHud">
+    <div class="hud" id="gameHud" style="display:none">
         <span>PLAYER: <b id="displayName">---</b></span>
-        <span>FASE <b id="lvlNum">1</b></span>
-        <span>⏱️ <b id="timer">00:00:00</b></span>
-        <span>MORTES <b id="deathCount">0</b></span>
+        <span>FASE: <b id="lvlNum">1</b></span>
+        <span>TEMPO: <b id="timer">00:00:00</b></span>
+        <span>MORTES: <b id="deathCount">0</b></span>
     </div>
 
     <div id="startMenu" class="overlay">
         <h1>SUPER BALL 100</h1>
-        <div id="welcomeMsg"></div>
         <input type="text" id="playerNameInput" placeholder="Seu nome..." maxlength="15">
         <button class="menu-btn" onclick="startGame()">INICIAR JOGO</button>
     </div>
 
-    <div id="pauseScreen" class="overlay" style="display:none;">
-        <h1>PAUSADO</h1>
-        <button class="menu-btn" onclick="togglePause()">VOLTAR</button>
-        <button class="menu-btn" onclick="location.reload()">MENU</button>
-    </div>
-
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas" style="display:none"></canvas>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 canvas.width = 1000; canvas.height = 500;
 
-const ballImg = new Image(); ballImg.src = 'bola amarela.webp'; 
-const gunImg = new Image(); gunImg.src = 'arma-de-gelo.webp'; 
+// SPRITES
+const ballImg = new Image(); 
+ballImg.src = 'bola amarela.webp'; 
 
-let currentLevel = 1, deaths = 0, startTime, gameRunning = false, isPaused = false;
-let keys = {}, mouse = { x: 0, y: 0 }, platforms = [], bullets = [];
-let player = { x: 60, y: 350, r: 18, vx: 0, vy: 0, angle: 0, speed: 1.5, friction: 0.95, grounded: false, canDoubleJump: true };
+const gunImg = new Image(); 
+gunImg.src = 'arma-de-gelo.webp'; 
+
+// Sprites do Assas (usados apenas nas fases 51-70)
+const assasSprites = [];
+const assasSpriteData = [];
+let assasLoadedCount = 0;
+const totalAssasSprites = 8;
+
+for (let i = 1; i <= 8; i++) {
+    const img = new Image();
+    img.src = `bola-amarela-assas${i.toString().padStart(4, '0')}.webp`;
+    img.onload = (function(idx) {
+        return function() {
+            const targetSize = 52;
+            const imgW = this.width;
+            const imgH = this.height;
+            const scale = targetSize / Math.max(imgW, imgH);
+            assasSpriteData[idx] = { w: imgW, h: imgH, scale: scale };
+            assasLoadedCount++;
+        };
+    })(i-1);
+    assasSprites.push(img);
+    assasSpriteData.push(null);
+}
+
+let currentLevel = 1, deaths = 0, startTime, gameRunning = false;
+let keys = {}, mouse = { x: 0, y: 0 }, platforms = [], bullets = [], lasers = [], movingPlatforms = [];
+let player = { x: 60, y: 300, r: 18, vx: 0, vy: 0, angle: 0, grounded: false, canDoubleJump: true };
+let spriteFrame = 0, spriteTimer = 0;
+let cameraX = 0;
+let playerName = "";
 
 function startGame() {
     const input = document.getElementById("playerNameInput").value.trim();
-    const welcome = document.getElementById("welcomeMsg");
-    const lowerInput = input.toLowerCase();
-    if (input === "") { welcome.innerText = "Digite um nome!"; return; }
-    if (lowerInput === "sinsice") { welcome.innerText = "BEM VINDO CRIADOR"; }
-    else if (lowerInput.includes("sinsice")) { welcome.innerText = "Acesso Negado (Nome Reservado)"; return; }
+    if (input === "") return;
+    playerName = input.toUpperCase();
     document.getElementById("startMenu").style.display = "none";
     document.getElementById("gameHud").style.display = "flex";
-    document.getElementById("displayName").innerText = input.toUpperCase();
+    document.getElementById("displayName").innerText = playerName;
     canvas.style.display = "block";
-    gameRunning = true; startTime = Date.now(); loadLevel(1); requestAnimationFrame(gameLoop);
+    gameRunning = true; 
+    startTime = Date.now();
+    deaths = 0;
+    document.getElementById("deathCount").innerText = deaths;
+    loadLevel(1); 
+    gameLoop();
 }
 
-function togglePause() {
-    if(!gameRunning) return;
-    isPaused = !isPaused;
-    document.getElementById("pauseScreen").style.display = isPaused ? "flex" : "none";
+function showVictory() {
+    gameRunning = false;
+    canvas.style.display = "none";
+    document.getElementById("gameHud").style.display = "none";
+    
+    const timeDiff = Date.now() - startTime;
+    const mins = Math.floor(timeDiff / 60000);
+    const secs = Math.floor((timeDiff % 60000) / 1000);
+    const totalDeaths = deaths;
+    
+    const victoryDiv = document.createElement("div");
+    victoryDiv.className = "victory-overlay";
+    victoryDiv.innerHTML = `
+        <div class="victory-title">✨ VITÓRIA! ✨</div>
+        <div class="victory-stats">
+            🎮 JOGADOR: <span>${playerName}</span><br>
+            ⭐ FASES COMPLETAS: <span>100</span><br>
+            💀 TOTAL DE MORTES: <span>${totalDeaths}</span><br>
+            ⏱️ TEMPO TOTAL: <span>${mins} minutos e ${secs} segundos</span><br>
+            🏆 VOCÊ CONQUISTOU A SUPER BALL! 🏆
+        </div>
+        <button class="restart-btn" onclick="restartGame()">▶ JOGAR NOVAMENTE</button>
+    `;
+    document.body.appendChild(victoryDiv);
+}
+
+function restartGame() {
+    const victoryDiv = document.querySelector(".victory-overlay");
+    if (victoryDiv) victoryDiv.remove();
+    startGame();
 }
 
 let rngSeed = 1;
 function random() { rngSeed = (rngSeed * 9301 + 49297) % 233280; return rngSeed / 233280; }
 
 function getBiome(n) {
+    if (n === 100) return { bg: "#FFD700", g: "#FFA500", t: "#FFFFFF", grav: 0.8, isFinal: true };
     if (n <= 10) return { bg: "#87ceeb", g: "#5d4037", t: "#2ecc71", grav: 0.8 };
     if (n <= 20) return { bg: "#f0f8ff", g: "#b0c4de", t: "#ffffff", grav: 0.8 };
-    if (n <= 32) return { bg: "#1a0505", g: "#331a00", t: "#ff4500", grav: 0.8, lava: true };
-    if (n <= 50) return { bg: "#4a7c82", g: "#444", t: "#666", grav: 0.9, mountain: true };
-    if (n <= 70) return { bg: "#001a33", water: true, grav: 0.15 };
-    if (n <= 80) return { bg: "#050505", laser: true, grav: 0.85 };
-    if (n <= 95) return { bg: "#000011", space: true, grav: 0.05 };
-    return { bg: "#2ecc71", g: "#4d2600", t: "#27ae60", grav: 0.8 };
+    if (n <= 32) return { bg: "#2a0000", g: "#440000", t: "#ff4500", lava: true, hasGun: true, grav: 0.8 };
+    // NOVAS FASES 33-40: Caos Móvel (plataformas que se movem, espinhos sincronizados)
+    if (n >= 33 && n <= 40) return { bg: "#2a1a2a", g: "#4a2a3a", t: "#ff66cc", grav: 0.8, isDynamic: true, levelType: "dynamic" };
+    if (n <= 50) return { bg: "#001a33", g: "#003366", t: "#00d4ff", water: true, grav: 0.2 }; 
+    if (n <= 70) return { bg: "#050505", g: "#111", t: "#f00", laser: true, grav: 0.8, isAssas: true, flappy: true, hasGun: true }; 
+    if (n <= 90) return { bg: "#4a1a2a", g: "#2a0a1a", t: "#ff66cc", grav: 0.85 }; 
+    if (n <= 99) return { bg: "#000011", g: "#000", t: "#fff", space: true, grav: 0.05 };
+    return { bg: "#000011", g: "#000", t: "#fff", space: true, grav: 0.05 };
 }
 
 function generateLevel(n) {
     rngSeed = n * 54321;
-    const biome = getBiome(n);
+    const b = getBiome(n);
     const lv = [];
-    lv.push({x: 0, y: 400, w: 100, h: 100, c: biome.g || "#555", t: biome.t || "#777", type: 'normal'});
+    lasers = [];
+    movingPlatforms = [];
     
-    let lastX = 100, lastY = 400;
-    if (!biome.water) {
-        while (lastX < 850) {
-            let gapX = biome.space ? 180 : 120 + (random() * 80);
-            let gapY = (random() * 140) - 70;
-            let width = biome.laser ? 45 : 60 + (random() * 40);
-            if (biome.mountain) { gapX = 70; gapY = -80 - (random() * 30); }
-            lastX += gapX; lastY += gapY;
-            if (lastY < 100) lastY = 150; if (lastY > 440) lastY = 400;
-            if (lastX > 880) break;
-            let type = biome.laser ? 'spike' : 'normal';
-            lv.push({x: lastX, y: lastY, w: width, h: 25, c: type==='spike'?'#f00':(biome.g||"#555"), t: type==='spike'?'#f00':(biome.t||"#777"), type: type, isRock: biome.mountain, points: biome.mountain ? generateRockPoints(width, 30) : null});
-            lastX += width;
+    if (n === 100) {
+        lv.push({x: 0, y: 300, w: 1000, h: 200, c: "#FFD700", t: "#FFA500", type: 'normal'});
+        lv.push({x: 450, y: 200, type: 'goal'});
+        return lv;
+    }
+    
+    if (b.laser) {
+        for(let i = 0; i < 12; i++) {
+            let safeX = 150 + (random() * 800);
+            lasers.push({ 
+                x: safeX, 
+                y: 50 + (random() * 400), 
+                angle: random() * Math.PI * 2, 
+                rotSpeed: 0.005 + (random() * 0.006),
+                len: 35 + (random() * 15)
+            });
         }
     }
-    let finalY = biome.water || biome.space ? 220 : lastY;
-    lv.push({x: 920, y: finalY, w: 60, h: 300, c: biome.g || "#444", t: biome.t || "#666", type: 'normal', isRock: biome.mountain, points: biome.mountain ? generateRockPoints(60, 40) : null});
-    lv.push({x: 950, y: finalY, type: 'goal'});
+
+    // NOVAS FASES DINÂMICAS (plataformas móveis e espinhos)
+    if (b.isDynamic) {
+        // Plataforma inicial fixa
+        lv.push({x: 0, y: 450, w: 80, h: 20, c: "#888", t: "#aaa", type: 'normal'});
+        
+        // Gera várias plataformas móveis mais lentas e com movimento suave
+        let numPlatforms = 6 + Math.floor(random() * 4);
+        let startX = 120;
+        for (let i = 0; i < numPlatforms; i++) {
+            let x = startX + i * (90 + random() * 50);
+            if (x > 900) break;
+            let y = 200 + random() * 250;
+            let w = 60 + random() * 40;
+            let moveRange = 30 + random() * 40; // movimento mais curto
+            let speed = 0.008 + random() * 0.012; // mais lento
+            let phase = random() * Math.PI * 2;
+            let type = random() > 0.7 ? 'spike' : 'moving';
+            movingPlatforms.push({
+                x: x, y: y, w: w, h: 15,
+                originalY: y,
+                moveRange: moveRange,
+                speed: speed,
+                phase: phase,
+                type: type,
+                color: type === 'spike' ? "#f44" : "#9b59b6"
+            });
+        }
+        
+        // Adiciona algumas plataformas fixas perigosas (espinhos)
+        for (let i = 0; i < 4; i++) {
+            lv.push({x: 150 + random() * 700, y: 400 + random() * 50, w: 50, h: 15, c: "#f00", t: "#f88", type: 'spike'});
+        }
+        
+        // Goal no final
+        lv.push({x: 920, y: 380, type: 'goal'});
+        return lv;
+    }
+
+    // Geração normal para outras fases
+    lv.push({x: 0, y: 400, w: 120, h: 500, c: b.g, t: b.t, type: 'normal'});
+    let lx = 120, ly = 400;
+    while (lx < 850) {
+        lx += 110 + (random()*80); ly += (random()*120)-60;
+        if (ly < 150) ly = 150; if (ly > 440) ly = 400;
+        let type = (b.lava || b.laser) && random() > 0.8 ? 'spike' : 'normal';
+        lv.push({x: lx, y: ly, w: 70, h: 25, c: type==='spike'?'#f00':b.g, t: type==='spike'?'#f00':b.t, type: type});
+    }
+    lv.push({x: 930, y: ly, w: 70, h: 500, c: b.g, t: b.t, type: 'normal'});
+    lv.push({x: 960, y: ly, type: 'goal'});
     return lv;
 }
 
-function generateRockPoints(w, h) {
-    return [{x: 0, y: 0}, {x: w*0.3, y: -8}, {x: w*0.7, y: -10}, {x: w, y: 0}, {x: w+10, y: h*0.5}, {x: w, y: h}, {x: 0, y: h}, {x: -10, y: h*0.5}];
-}
-
-function loadLevel(n) {
-    currentLevel = n; bullets = []; platforms = generateLevel(n);
-    player.x = 40; player.y = 350; player.vx = 0; player.vy = 0;
-    document.getElementById("lvlNum").innerText = n;
+function loadLevel(n) { 
+    if (n > 100) {
+        showVictory();
+        return;
+    }
+    
+    currentLevel = n; 
+    bullets = []; 
+    platforms = generateLevel(n); 
+    cameraX = 0;
+    
+    let b = getBiome(n);
+    if (b.laser) {
+        player.x = 40;
+        player.y = 250;
+    } else if (b.isDynamic) {
+        player.x = 60;
+        player.y = 430; // começa em cima da plataforma inicial
+    } else if (n === 100) {
+        player.x = 100;
+        player.y = 250;
+    } else {
+        player.x = 60;
+        player.y = 300;
+    }
+    
+    player.vx = 0;
+    player.vy = 0;
+    player.angle = 0;
+    player.grounded = false;
+    player.canDoubleJump = true;
+    
+    document.getElementById("lvlNum").innerText = n; 
 }
 
 function update() {
-    if (!gameRunning || isPaused) return;
+    if (!gameRunning) return;
+    
     let b = getBiome(currentLevel);
-    if (keys[39]) player.vx += (b.space ? 0.4 : 1.0);
-    if (keys[37]) player.vx -= (b.space ? 0.4 : 1.0);
-    player.vy += b.grav;
-    let f = b.water ? 0.94 : (b.space ? 0.98 : 0.95);
-    player.vx *= f; player.vy *= (b.space || b.water ? f : 1);
-    player.x += player.vx; player.y += player.vy;
-    player.angle += player.vx * 0.1;
-
-    player.grounded = false;
-    platforms.forEach(p => {
-        if (p.type === 'goal') {
-            if (Math.hypot(player.x - p.x, player.y - (p.y - 20)) < 45) loadLevel(currentLevel + 1);
-            return;
+    
+    if (currentLevel === 100) {
+        player.vy += 0.5;
+        player.vx *= 0.98;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.angle += player.vx * 0.15;
+        
+        if (player.x < player.r) player.x = player.r;
+        if (player.x > 1000 - player.r) player.x = 1000 - player.r;
+        
+        if (player.x > 450 && player.y + player.r > 180 && player.y - player.r < 220) {
+            loadLevel(101);
         }
-        if (player.x + player.r > p.x && player.x - player.r < p.x + p.w && player.y + player.r > p.y && player.y - player.r < p.y + p.h) {
+        
+        if (player.y > 500) {
+            deaths++;
+            loadLevel(100);
+        }
+        
+        document.getElementById("deathCount").innerText = deaths;
+        return;
+    }
+    
+    if(b.isAssas) { spriteTimer++; if(spriteTimer % 5 === 0) spriteFrame = (spriteFrame + 1) % 8; }
+
+    // Controles - MAIS SUAVES E LENTOS
+    if (keys[39]) player.vx += 0.45;   // aceleração reduzida
+    if (keys[37]) player.vx -= 0.45;
+    
+    // Rotação
+    player.angle += player.vx * 0.1;
+    if (!player.grounded && Math.abs(player.vy) > 3) {
+        player.angle += (player.vy > 0 ? 0.06 : -0.06);
+    }
+    if (player.angle > Math.PI * 2) player.angle -= Math.PI * 2;
+    if (player.angle < 0) player.angle += Math.PI * 2;
+    
+    // Física geral
+    player.vy += b.grav;
+    player.x += player.vx;
+    player.y += player.vy;
+    
+    // Atrito no ar e no chão (maior atrito para controle)
+    if (!player.grounded) player.vx *= 0.99;
+    else player.vx *= 0.97;   // atrito maior no chão
+    
+    // Limite de velocidade máxima (mais baixo)
+    let maxSpeed = 9;
+    player.vx = Math.min(Math.max(player.vx, -maxSpeed), maxSpeed);
+    
+    // Limites laterais
+    if (player.x < player.r) player.x = player.r;
+    if (player.x > 1000 - player.r) player.x = 1000 - player.r;
+    
+    // Colisão com plataformas (incluindo as móveis)
+    player.grounded = false;
+    let collisionOccurred = false;
+    
+    // Primeiro, plataformas fixas (do array platforms)
+    platforms.forEach(p => {
+        if (p.type === 'goal' && Math.hypot(player.x - p.x, player.y - (p.y - 20)) < 45) {
+            loadLevel(currentLevel + 1);
+        }
+        if (player.x + player.r > p.x && player.x - player.r < p.x + p.w && 
+            player.y + player.r > p.y && player.y - player.r < p.y + p.h) {
             if (p.type === 'spike') { deaths++; loadLevel(currentLevel); return; }
-            if (player.vy > 0 && player.y < p.y + 12) { 
-                player.grounded = true; 
-                player.canDoubleJump = true; // RESET PULO DUPLO
-                player.vy = 0; player.y = p.y - player.r; 
+            if (player.vy > 0 && player.y < p.y + 15) {
+                player.grounded = true;
+                player.canDoubleJump = true;
+                player.vy = 0;
+                player.y = p.y - player.r;
+                collisionOccurred = true;
             }
-            else { player.vx *= -0.5; }
         }
     });
-
-    if (player.y > 550 || player.y < -200) { deaths++; loadLevel(currentLevel); }
-    if (player.x < 0) player.x = 0; if (player.x > 1000) player.x = 1000;
-    document.getElementById("timer").innerText = new Date(Date.now() - startTime).toISOString().substr(14, 8);
+    
+    // Depois, plataformas móveis (se existirem)
+    if (b.isDynamic) {
+        movingPlatforms.forEach(mp => {
+            // Atualiza posição Y da plataforma móvel (movimento suave)
+            let newY = mp.originalY + Math.sin(Date.now() * mp.speed + mp.phase) * mp.moveRange;
+            mp.y = newY;
+            
+            // Colisão com a plataforma móvel
+            if (player.x + player.r > mp.x && player.x - player.r < mp.x + mp.w && 
+                player.y + player.r > mp.y && player.y - player.r < mp.y + mp.h) {
+                if (mp.type === 'spike') { deaths++; loadLevel(currentLevel); return; }
+                if (player.vy > 0 && player.y < mp.y + 15) {
+                    player.grounded = true;
+                    player.canDoubleJump = true;
+                    player.vy = 0;
+                    player.y = mp.y - player.r;
+                    collisionOccurred = true;
+                }
+            }
+        });
+    }
+    
+    // Se não colidiu com nada, está no ar
+    if (!collisionOccurred) player.grounded = false;
+    
+    // Limite inferior (morte)
+    if (player.y > 550) { deaths++; loadLevel(currentLevel); }
+    if (player.y < -150) { deaths++; loadLevel(currentLevel); }
+    
+    // Lava (se houver)
+    if (b.lava && player.y + player.r > 480) { deaths++; loadLevel(currentLevel); }
+    
+    // Lasers
+    lasers.forEach(l => {
+        l.angle += l.rotSpeed;
+        let x2 = l.x + Math.cos(l.angle) * l.len;
+        let y2 = l.y + Math.sin(l.angle) * l.len;
+        let dist = distToSegment({x: player.x, y: player.y}, {x: l.x, y: l.y}, {x: x2, y: y2});
+        if (dist < player.r - 3) { deaths++; loadLevel(currentLevel); }
+    });
+    
+    // Balas
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let bu = bullets[i]; bu.x += bu.vx; bu.y += bu.vy;
+        if(b.lava && bu.y > 480) {
+            platforms.push({x: bu.x - 35, y: 480, w: 70, h: 20, c: '#add8e6', t: '#fff', type: 'ice'});
+            bullets.splice(i, 1); continue;
+        }
+        if (bu.x < 0 || bu.x > 1000 || bu.y < 0 || bu.y > 500) bullets.splice(i, 1);
+    }
+    
+    // Timer
+    let timeDiff = Date.now() - startTime;
+    let mins = Math.floor(timeDiff / 60000).toString().padStart(2, '0');
+    let secs = Math.floor((timeDiff % 60000) / 1000).toString().padStart(2, '0');
+    let msecs = Math.floor((timeDiff % 1000) / 10).toString().padStart(2, '0');
+    document.getElementById("timer").innerText = mins+":"+secs+":"+msecs;
     document.getElementById("deathCount").innerText = deaths;
+}
+
+function distToSegment(p, v, w) {
+    let l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+    if (l2 == 0) return Math.hypot(p.x - v.x, p.y - v.y);
+    let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
+    return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
 }
 
 function draw() {
     let b = getBiome(currentLevel);
-    ctx.fillStyle = b.bg; ctx.fillRect(0, 0, 1000, 500);
-    if(b.space) { ctx.fillStyle = "#fff"; for(let i=0; i<20; i++) ctx.fillRect((i*157)%1000, (i*243)%500, 2, 2); }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (currentLevel === 100) {
+        ctx.fillStyle = "#FFD700";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < 50; i++) {
+            ctx.fillStyle = `hsl(${Date.now() + i * 100}, 100%, 50%)`;
+            ctx.fillRect((i * 20 + Date.now() * 0.01) % canvas.width, (i * 10) % canvas.height, 5, 5);
+        }
+        ctx.fillStyle = "#FFA500";
+        ctx.fillRect(0, 300, canvas.width, 200);
+        ctx.font = "bold 36px Arial";
+        ctx.fillStyle = "#FFF";
+        ctx.shadowBlur = 10;
+        ctx.fillText("✨ FASE FINAL! ✨", canvas.width/2 - 150, 80);
+        ctx.font = "20px Arial";
+        ctx.fillText("Vá até o portal dourado!", canvas.width/2 - 130, 140);
+        ctx.fillStyle = "#FFD700";
+        ctx.fillRect(450, 200, 100, 50);
+        ctx.fillStyle = "#FFA500";
+        ctx.fillRect(470, 210, 60, 30);
+        ctx.fillStyle = "#FFF";
+        ctx.fillText("GOAL", 485, 240);
+        ctx.shadowBlur = 0;
+    }
+    
+    // Desenho de fundo e plataformas
+    ctx.fillStyle = b.bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    if(b.lava) { ctx.fillStyle = "#ff4500"; ctx.fillRect(0, 480, canvas.width, 20); }
+    
+    lasers.forEach(l => {
+        ctx.save();
+        ctx.translate(l.x, l.y);
+        ctx.rotate(l.angle);
+        ctx.strokeStyle = "#ff3366";
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(l.len, 0);
+        ctx.stroke();
+        ctx.fillStyle = "#ff6699";
+        ctx.beginPath();
+        ctx.arc(l.len, 0, 3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+    });
+    
     platforms.forEach(p => {
         if(p.type === 'goal') {
-            ctx.fillStyle = "#fff"; ctx.fillRect(p.x-2, p.y-70, 4, 70);
-            ctx.fillStyle = "red"; ctx.beginPath(); ctx.moveTo(p.x, p.y-70); ctx.lineTo(p.x+40, p.y-50); ctx.lineTo(p.x, p.y-30); ctx.fill();
-        } else if (p.isRock) {
-            ctx.fillStyle = "#555"; ctx.beginPath();
-            ctx.moveTo(p.x + p.points[0].x, p.y + p.points[0].y);
-            p.points.forEach(pt => ctx.lineTo(p.x + pt.x, p.y + pt.y));
-            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(p.x-2, p.y-70, 4, 70);
+            ctx.fillStyle = "red";
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y-70);
+            ctx.lineTo(p.x+40, p.y-50);
+            ctx.lineTo(p.x, p.y-30);
+            ctx.fill();
         } else {
-            ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, p.w, p.h);
-            ctx.fillStyle = p.t; ctx.fillRect(p.x, p.y, p.w, 4);
+            ctx.fillStyle = p.c;
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = p.t;
+            ctx.fillRect(p.x, p.y, p.w, 4);
         }
     });
-    ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
-    ctx.drawImage(ballImg, -player.r, -player.r, player.r*2, player.r*2); ctx.restore();
-    if(currentLevel >= 11) {
-        let a = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-        ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(a);
-        ctx.drawImage(gunImg, 15, -12, 40, 25); ctx.restore();
+    
+    if (b.isDynamic) {
+        movingPlatforms.forEach(mp => {
+            ctx.fillStyle = mp.color;
+            ctx.fillRect(mp.x, mp.y, mp.w, mp.h);
+            if (mp.type === 'spike') {
+                ctx.fillStyle = "#f88";
+                for (let i = 0; i < 3; i++) {
+                    ctx.fillRect(mp.x + i*10, mp.y-5, 5, 5);
+                }
+            }
+        });
+    }
+    
+    bullets.forEach(bu => { ctx.fillStyle = "cyan"; ctx.beginPath(); ctx.arc(bu.x, bu.y, 6, 0, Math.PI*2); ctx.fill(); });
+    
+    // Jogador
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    if(b.isAssas) {
+        const data = assasSpriteData[spriteFrame];
+        if (data) {
+            const w = data.w * data.scale;
+            const h = data.h * data.scale;
+            ctx.drawImage(assasSprites[spriteFrame], -w/2, -h/2, w, h);
+        } else {
+            ctx.drawImage(assasSprites[spriteFrame], -player.r, -player.r, player.r*2, player.r*2);
+        }
+    } else {
+        ctx.rotate(player.angle);
+        ctx.drawImage(ballImg, -player.r, -player.r, player.r*2, player.r*2);
+    }
+    ctx.restore();
+
+    if(b.hasGun && !b.isDynamic && currentLevel !== 100) {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        let angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+        ctx.rotate(angle);
+        ctx.drawImage(gunImg, 10, -10, 30, 20);
+        ctx.restore();
+    }
+    
+    // Texto informativo para fases dinâmicas
+    if (b.isDynamic) {
+        ctx.font = "bold 20px monospace";
+        ctx.fillStyle = "#ffcc66";
+        ctx.shadowBlur = 4;
+        ctx.fillText("⚡ PLATAFORMAS MÓVEIS ⚡", 20, 50);
+        ctx.font = "14px monospace";
+        ctx.fillStyle = "#aaa";
+        ctx.fillText("CUIDADO! ESPINHOS SE MOVEM", 20, 80);
+        ctx.shadowBlur = 0;
     }
 }
 
-function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+function gameLoop() { 
+    if (gameRunning) { update(); draw(); }
+    requestAnimationFrame(gameLoop); 
+}
 
 window.addEventListener("keydown", e => {
+    if (!gameRunning) return;
     keys[e.keyCode] = true;
-    if (e.key === "Escape") togglePause();
     if (e.keyCode === 32) {
         let b = getBiome(currentLevel);
-        // Lógica de Pulo Duplo
-        if (player.grounded || b.water || b.space) {
-            player.vy = b.water ? -6 : (b.space ? -4 : -13);
-            player.grounded = false;
-        } else if (player.canDoubleJump) {
-            player.vy = -11;
-            player.canDoubleJump = false;
+        if (b.flappy) { player.vy = -7; } 
+        else {
+            if (player.grounded) { 
+                player.vy = -11;   // pulo um pouco mais suave
+                player.grounded = false;
+                player.angle += 0.2;
+            }
+            else if (player.canDoubleJump) { 
+                player.vy = -9; 
+                player.canDoubleJump = false;
+                player.angle += 0.4;
+            }
         }
     }
+    if (e.keyCode === 82) platforms = platforms.filter(p => p.type !== 'ice');
 });
 window.addEventListener("keyup", e => keys[e.keyCode] = false);
+
+window.addEventListener('mousedown', () => {
+    if (!gameRunning) return;
+    let b = getBiome(currentLevel);
+    if(!b.hasGun || b.isDynamic || currentLevel === 100) return;
+    let a = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+    bullets.push({x: player.x, y: player.y, vx: Math.cos(a)*15, vy: Math.sin(a)*15});
+});
+
 canvas.addEventListener('mousemove', e => { 
     let r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; 
 });
